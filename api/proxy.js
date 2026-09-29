@@ -2,7 +2,6 @@ export default async function handler(req, res) {
   try {
     const url = new URL(req.url, `https://${req.headers.host}`);
     
-    // टारगेट यूआरएल सीधा बनाएँ
     let cleanPath = url.pathname.replace(/^\/api\/proxy/, '');
     if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
     if (cleanPath === '//') cleanPath = '/';
@@ -12,7 +11,7 @@ export default async function handler(req, res) {
     const method = req.method;
     const headers = {};
     
-    // क्लाइंट के सारे जरूरी हेडर्स को सुरक्षित रूप से कॉपी करें (विशेषकर Authorization)
+    // सभी ओरिजिनल हेडर्स को सुरक्षित रूप से पास करें
     for (const [key, value] of Object.entries(req.headers)) {
       const lowerKey = key.toLowerCase();
       if (!['host', 'content-length', 'connection', 'accept-encoding'].includes(lowerKey)) {
@@ -45,7 +44,6 @@ export default async function handler(req, res) {
       try {
         let json = JSON.parse(buffer.toString('utf8'));
 
-        // सब्सक्रिप्शन और प्रोफाइल को एक्टिव रखना
         if (json.data && typeof json.data === 'object') {
           if ('subStat' in json.data) json.data.subStat = "1";
           if ('plan' in json.data) json.data.plan = "Lifetime VIP Active";
@@ -59,7 +57,6 @@ export default async function handler(req, res) {
           json.user.is_vip = true;
         }
 
-        // सेफ अनलॉकर
         const unlockSafe = (obj) => {
           if (obj && typeof obj === 'object') {
             if ('is_locked' in obj) obj.is_locked = false;
