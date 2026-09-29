@@ -1,7 +1,14 @@
 export default async function handler(req, res) {
   try {
     const url = new URL(req.url, `https://${req.headers.host}`);
-    const targetUrl = `https://api.storytv.asia${url.pathname === '/api/proxy' ? '' : url.pathname}${url.search}`;
+    
+    // राउटिंग और पाथ को बिल्कुल क्लीन करना ताकि कोई एरर न आए
+    let cleanPath = url.pathname.replace(/^\/api\/proxy/, '');
+    if (!cleanPath.startsWith('/')) {
+      cleanPath = '/' + cleanPath;
+    }
+
+    const targetUrl = `https://api.storytv.asia${cleanPath}${url.search}`;
 
     const method = req.method;
     const headers = { ...req.headers };
@@ -35,7 +42,7 @@ export default async function handler(req, res) {
       try {
         let json = JSON.parse(buffer.toString('utf8'));
 
-        // 1. प्रोफाइल और सब्सक्रिप्शन स्टेटस को एक्टिव करना
+        // 1. यूजर प्रोफाइल, सब्सक्रिप्शन और स्टेट को पूरी तरह से VIP और Active करना
         if (json.data && typeof json.data === 'object') {
           if ('subStat' in json.data) json.data.subStat = "1";
           if ('plan' in json.data) json.data.plan = "Lifetime VIP Active";
@@ -44,6 +51,8 @@ export default async function handler(req, res) {
           if ('mdActv' in json.data) json.data.mdActv = true;
           json.data.has_premium = true;
           json.data.is_vip = true;
+          json.data.locked = false;
+          json.data.is_locked = false;
         }
 
         if (json.user) {
@@ -51,18 +60,39 @@ export default async function handler(req, res) {
           json.user.is_vip = true;
         }
 
-        // 2. रिकर्सिवली सभी शोज़, एपिसोड्स और लॉक्स को हमेशा के लिए खोलना
+        // 2. 100% फुल-प्रूफ एडवांस रिकर्सिव अनलॉक स्कैनर (Advanced Deep Unlocker)
         const unlockEverything = (obj) => {
           if (obj && typeof obj === 'object') {
-            if ('is_locked' in obj) obj.is_locked = false;
-            if ('locked' in obj) obj.locked = false;
-            if ('is_premium' in obj) obj.is_premium = false;
-            if ('is_vip' in obj) obj.is_vip = true;
-            if ('paid' in obj) obj.paid = false;
-            if ('free' in obj) obj.free = true;
-            if ('monetization_type' in obj) obj.monetization_type = 'free';
-            if ('access_type' in obj) obj.access_type = 'free';
+            // हर संभव लॉकिंग और मोनेटाइजेशन फ्लैग को टारगेट करना
+            for (let key in obj) {
+              if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                const lowerKey = key.toLowerCase();
+                
+                // अगर की में lock, locked, premium, vip, paid, free आदि से जुड़ा कुछ भी है
+                if (lowerKey.includes('lock') || lowerKey.includes('is_locked')) {
+                  obj[key] = false;
+                }
+                if (lowerKey.includes('premium') || lowerKey.includes('vip')) {
+                  if (typeof obj[key] === 'boolean') obj[key] = true;
+                  if (typeof obj[key] === 'string') obj[key] = "1";
+                }
+                if (lowerKey.includes('paid')) {
+                  obj[key] = false;
+                }
+                if (lowerKey.includes('free')) {
+                  obj[key] = true;
+                }
+                if (lowerKey.includes('price') || lowerKey.includes('coin') || lowerKey.includes('amount')) {
+                  if (typeof obj[key] === 'number') obj[key] = 0;
+                  if (typeof obj[key] === 'string') obj[key] = "0";
+                }
+                if (lowerKey.includes('status') || lowerKey.includes('stat')) {
+                  if (obj[key] === "0" || obj[key] === 0) obj[key] = "1";
+                }
+              }
+            }
 
+            // स्पेसिफिक एपिसोड्स एरे को जबरन अनलॉक करना
             if (Array.isArray(obj.episodes)) {
               obj.episodes.forEach(ep => {
                 if (ep && typeof ep === 'object') {
@@ -70,10 +100,14 @@ export default async function handler(req, res) {
                   ep.locked = false;
                   ep.is_free = true;
                   ep.is_premium = false;
+                  ep.paid = false;
+                  if ('coin' in ep) ep.coin = 0;
+                  if ('price' in ep) ep.price = 0;
                 }
               });
             }
 
+            // सभी प्रकार की लिस्ट, कंटेंट और डेटा एरेज़ को स्कैन करना
             if (Array.isArray(obj.content)) {
               obj.content.forEach(item => unlockEverything(item));
             }
@@ -83,7 +117,11 @@ export default async function handler(req, res) {
             if (Array.isArray(obj.data)) {
               obj.data.forEach(item => unlockEverything(item));
             }
+            if (Array.isArray(obj.list)) {
+              obj.list.forEach(item => unlockEverything(item));
+            }
 
+            // नेस्टेड ऑब्जेक्ट्स के लिए रिकर्सिव कॉल
             Object.values(obj).forEach(val => {
               if (typeof val === 'object' && val !== null) {
                 unlockEverything(val);
@@ -97,7 +135,9 @@ export default async function handler(req, res) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).send(JSON.stringify(json));
-      } catch (err) {}
+      } catch (err) {
+        // एरर आने पर भी ऐप क्रैश न हो, ओरिजिनल पास कर दो
+      }
     }
 
     response.headers.forEach((value, key) => {
