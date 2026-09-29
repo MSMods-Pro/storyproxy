@@ -41,12 +41,10 @@ export default async function handler(req, res) {
       try {
         let json = JSON.parse(buffer.toString('utf8'));
 
-        // 1. प्रोफाइल और सब्सक्रिप्शन को एक्टिव करना
+        // 1. केवल जरूरी सब्सक्रिप्शन और प्रोफाइल फ्लैग्स को सुरक्षित रूप से अपडेट करना
         if (json.data && typeof json.data === 'object') {
           if ('subStat' in json.data) json.data.subStat = "1";
           if ('plan' in json.data) json.data.plan = "Lifetime VIP Active";
-          if ('cta' in json.data) json.data.cta = "Subscribed";
-          if ('valdTxt' in json.data) json.data.valdTxt = "All Episodes Unlocked";
           if ('mdActv' in json.data) json.data.mdActv = true;
           json.data.has_premium = true;
           json.data.is_vip = true;
@@ -57,75 +55,52 @@ export default async function handler(req, res) {
           json.user.is_vip = true;
         }
 
-        // 2. एडवांस रिकर्सिव अनलॉक और वीडियो स्ट्रीमिंग लिंक प्रोटेक्टर
-        const unlockEverything = (obj) => {
+        // 2. सेफ रिकर्सिव अनलॉक (जो केवल लॉकिंग फ्लैग्स को टारगेट करे, स्टेटस कोड को नहीं)
+        const unlockSafe = (obj) => {
           if (obj && typeof obj === 'object') {
-            for (let key in obj) {
-              if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                const lowerKey = key.toLowerCase();
-                
-                if (lowerKey.includes('lock') || lowerKey.includes('is_locked')) {
-                  obj[key] = false;
-                }
-                if (lowerKey.includes('premium') || lowerKey.includes('vip')) {
-                  if (typeof obj[key] === 'boolean') obj[key] = true;
-                  if (typeof obj[key] === 'string') obj[key] = "1";
-                }
-                if (lowerKey.includes('paid')) {
-                  obj[key] = false;
-                }
-                if (lowerKey.includes('free')) {
-                  obj[key] = true;
-                }
-                if (lowerKey.includes('price') || lowerKey.includes('coin') || lowerKey.includes('amount')) {
-                  if (typeof obj[key] === 'number') obj[key] = 0;
-                  if (typeof obj[key] === 'string') obj[key] = "0";
-                }
-              }
-            }
+            if ('is_locked' in obj) obj.is_locked = false;
+            if ('locked' in obj) obj.locked = false;
+            if ('is_premium' in obj) obj.is_premium = false;
+            if ('is_vip' in obj) obj.is_vip = true;
+            if ('paid' in obj) obj.paid = false;
+            if ('free' in obj) obj.free = true;
 
-            // एपिसोड्स एरे को पूरी तरह से खोलना और वीडियो लिंक्स को सुरक्षित करना
             if (Array.isArray(obj.episodes)) {
               obj.episodes.forEach(ep => {
                 if (ep && typeof ep === 'object') {
                   ep.is_locked = false;
                   ep.locked = false;
                   ep.is_free = true;
-                  ep.is_premium = false;
-                  ep.paid = false;
-                  if ('coin' in ep) ep.coin = 0;
-                  if ('price' in ep) ep.price = 0;
                 }
               });
             }
 
             if (Array.isArray(obj.content)) {
-              obj.content.forEach(item => unlockEverything(item));
+              obj.content.forEach(item => unlockSafe(item));
             }
             if (Array.isArray(obj.items)) {
-              obj.items.forEach(item => unlockEverything(item));
+              obj.items.forEach(item => unlockSafe(item));
             }
             if (Array.isArray(obj.data)) {
-              obj.data.forEach(item => unlockEverything(item));
-            }
-            if (Array.isArray(obj.list)) {
-              obj.list.forEach(item => unlockEverything(item));
+              obj.data.forEach(item => unlockSafe(item));
             }
 
             Object.values(obj).forEach(val => {
               if (typeof val === 'object' && val !== null) {
-                unlockEverything(val);
+                unlockSafe(val);
               }
             });
           }
         };
 
-        unlockEverything(json);
+        unlockSafe(json);
 
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).send(JSON.stringify(json));
-      } catch (err) {}
+      } catch (err) {
+        // अगर पार्सिंग में कोई दिक्कत हो तो ओरिजिनल भेजें
+      }
     }
 
     response.headers.forEach((value, key) => {
